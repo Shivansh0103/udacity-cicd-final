@@ -1,0 +1,88 @@
+name: Frontend Continuous Deployment
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'starter/frontend/**'
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: mp-frontend
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: starter/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: starter/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - run: npm ci
+      - run: CI=true npm test
+
+  build:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: starter/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - run: npm ci
+      - run: npm run build
+      - name: Build Docker image
+        run: |
+          docker build --build-arg=REACT_APP_MOVIE_API_URL=http://localhost:5000 \
+            -t ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }} .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Tag and Push Docker image to ECR
+        run: |
+          docker tag ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }} ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }}
+          docker push ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }}
+
+      - name: Update Kubernetes manifest image tag
+        run: |
+          cd starter/frontend/k8s
+          kustomize edit set image frontend=${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }}
+
+      - name: Deploy to Kubernetes
+        run: |
+          cd starter/frontend/k8s
+          kustomize build | kubectl apply -f -
