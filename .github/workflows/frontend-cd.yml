@@ -2,7 +2,7 @@ name: Frontend Continuous Deployment
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths:
       - 'starter/frontend/**'
   workflow_dispatch:
@@ -50,10 +50,22 @@ jobs:
           node-version: '18'
       - run: npm ci
       - run: npm run build
-      - name: Build Docker image
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Docker image
         run: |
           docker build --build-arg=REACT_APP_MOVIE_API_URL=http://localhost:5000 \
             -t ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }} .
+          docker push ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }}
 
   deploy:
     needs: build
@@ -68,14 +80,9 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Tag and Push Docker image to ECR
+      - name: Update kubeconfig
         run: |
-          docker tag ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }} ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }}
-          docker push ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }}
+          aws eks --region ${{ secrets.AWS_REGION }} update-kubeconfig --name ${{ secrets.EKS_CLUSTER_NAME }}
 
       - name: Update Kubernetes manifest image tag
         run: |
