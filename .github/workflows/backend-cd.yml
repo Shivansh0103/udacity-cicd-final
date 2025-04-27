@@ -23,6 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd starter/backend
+          pip install pipenv
           pipenv install --dev
 
       - name: Run lints
@@ -45,6 +46,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd starter/backend
+          pip install pipenv
           pipenv install --dev
 
       - name: Run tests
