@@ -63,7 +63,7 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build --build-arg=REACT_APP_MOVIE_API_URL=${{ secrets.ECR_REPO_URL_BACKEND }}:${{ github.sha }} \
+          docker build --build-arg=REACT_APP_MOVIE_API_URL=${{ secrets.EKS_BACKEND_REPO }} \
             -t ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }} .
           docker push ${{ secrets.ECR_REPO_URL_FRONTEND }}:${{ github.sha }}
 
